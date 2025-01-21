@@ -1,63 +1,33 @@
-import os  # ファイルの存在確認用
-import numpy as np
 import pygame
 import sys
 import random
+import numpy as np
+import os
 
-# ファイル保存用パス
-Q_TABLE_PATH = "q_table.npy"
-
-# ファイル保存用パス
-Q_TABLE_PATH = "q_table.npy"
-
-# Qテーブルの初期化または読み込み
-def initialize_q_table(path):
-    if os.path.exists(path) and os.path.getsize(path) > 0:
-        try:
-            q_table = np.load(path)  # ファイルが存在し、中身があれば読み込む
-            print("Qテーブルを読み込みました。")
-            return q_table
-        except Exception as e:
-            print(f"Qテーブルの読み込みに失敗しました: {e}")
-    # ファイルがない、空、またはエラーの場合は初期化
-    print("新しいQテーブルを作成しました。")
-    return np.zeros((401, 801, 2))
-
-q_table = initialize_q_table(Q_TABLE_PATH)
-
-# ...（残りのコードはそのまま）
-
-
-# Qテーブルの初期化または読み込み
-if os.path.exists(Q_TABLE_PATH):
-    q_table = np.load(Q_TABLE_PATH)  # ファイルが存在する場合は読み込み
-    print("Qテーブルを読み込みました。")
-else:
-    q_table = np.zeros((401, 801, 2))  # 初期化
-    print("新しいQテーブルを作成しました。")
-
-# ゲーム初期設定
+# pygameの初期化
 pygame.init()
+
+# ウィンドウの設定
 WIDTH, HEIGHT = 800, 400
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("T-Rex GameAI !!")
+pygame.display.set_caption("T-Rex Game AI")
 clock = pygame.time.Clock()
 
-# 色定義
+# 色の定義
 WHITE = (255, 255, 255)
 BROWN = (139, 69, 19)
 SKY_BLUE = (135, 206, 235)
 player_color = (0, 200, 0)
 cactus_color = (0, 128, 0)
 
-# プレイヤー（恐竜）設定
+# プレイヤーの設定
 player = pygame.Rect(100, 300, 40, 40)
 player_velocity_y = 0
 is_jumping = False
 jump_power = -15
 gravity = 0.8
 
-# 障害物（サボテン）設定
+# サボテンの設定
 cacti = []
 cactus_speed = 5
 min_cactus_frequency = 1500
@@ -68,10 +38,26 @@ last_cactus_spawn_time = 0
 score = 0
 game_over = False
 
-# Q学習のパラメータ設定
+# Q学習のパラメータ
 gamma = 0.9  # 割引率
 alpha = 0.1  # 学習率
 epsilon = 0.1  # 探索率
+
+# Qテーブルの初期化
+Q_TABLE_PATH = "q_table.npy"
+
+def initialize_q_table(path):
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        try:
+            q_table = np.load(path)
+            print("Qテーブルを読み込みました。")
+            return q_table
+        except Exception as e:
+            print(f"Qテーブルの読み込みに失敗しました: {e}")
+    print("新しいQテーブルを作成しました。")
+    return np.zeros((401, 801, 2))
+
+q_table = initialize_q_table(Q_TABLE_PATH)
 
 # サボテンを生成
 def generate_cactus():
@@ -98,22 +84,23 @@ def update_q_value(state, action, reward, next_state):
     q_table[state[0], state[1], action] = old_q_value + alpha * (reward + gamma * future_q_value - old_q_value)
 
 # ゲームループ
-while True:  # 無限ループでゲームをリスタート
+previous_score = 0  # 前回のスコアを保持する変数
+while True:
+    reward = 0  # rewardを初期化
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            # ゲーム終了時にQテーブルを保存
             np.save(Q_TABLE_PATH, q_table)
             print("Qテーブルを保存しました。")
             pygame.quit()
             sys.exit()
 
     if game_over:
-        # ゲームオーバー後、状態をリセット
         cacti.clear()
         player.y = 300
         player_velocity_y = 0
         is_jumping = False
         score = 0
+        previous_score = 0
         game_over = False
 
     # 状態の取得
@@ -122,9 +109,16 @@ while True:  # 無限ループでゲームをリスタート
     # アクションの選択
     action = select_action(state)
 
+    # ジャンプアクションの実行
     if action == 1 and not is_jumping:
         player_velocity_y = jump_power
         is_jumping = True
+
+        # ジャンプしたときにスコアが増えていない場合に罰を与える
+        if score == previous_score:
+            reward = -0.015  # 罰を与える
+        else:
+            reward = 0  # スコアが増えている場合は罰を与えない
 
     # 重力処理
     player_velocity_y += gravity
@@ -150,7 +144,6 @@ while True:  # 無限ループでゲームをリスタート
         last_cactus_spawn_time = current_time
 
     # 衝突判定
-    reward = 0
     for cactus in cacti:
         if player.colliderect(cactus):
             reward = -1
@@ -161,6 +154,9 @@ while True:  # 無限ループでゲームをリスタート
 
     # Q値の更新
     update_q_value(state, action, reward, next_state)
+
+    # 前回のスコアを更新
+    previous_score = score
 
     # 描画処理
     screen.fill(SKY_BLUE)
