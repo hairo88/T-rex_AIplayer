@@ -1,3 +1,1 @@
 ﻿# T-rex_AIplayer
-
-upgradeAIplayer.py
